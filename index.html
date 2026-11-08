@@ -95,7 +95,7 @@ window.addEventListener('unhandledrejection', function (e) {
 });
 </script>
 <div id="noBle" class="banner" hidden>
-  This browser has no Web Bluetooth. On iPhone: open this page in <b>Bluefy – Web BLE Browser</b>, or enable the <b>WebBLE</b> extension in Safari for this site.
+  This browser has no Web Bluetooth. On iPhone: open this page in <b>Bluefy – Web BLE Browser</b>, or enable the <b>beacio</b> extension in Safari for this site (aA → beacio → Always Allow).
 </div>
 
 <section class="card" id="live">
@@ -155,8 +155,10 @@ const FRAME_LEN = { 0x36: 10, 0x34: 6, 0x18: 6 };
 const STORE_KEY = 'sp-timer-sessions-v1';
 
 const $ = (s) => document.querySelector(s);
-// Bluefy exposes navigator.bluetooth; the WebBLE Safari extension exposes navigator.webble
-const getBle = () => navigator.bluetooth || navigator.webble || null;
+// Bluefy and the beacio (ex-WebBLE) Safari extension expose navigator.bluetooth;
+// beacio also has navigator.beacio, older WebBLE builds navigator.webble
+const getBle = () => navigator.bluetooth || navigator.beacio || navigator.webble || null;
+const bleName = () => (navigator.bluetooth ? 'navigator.bluetooth' : navigator.beacio ? 'navigator.beacio' : 'navigator.webble');
 const state = {
   device: null, sessions: [], current: null, rx: [],
   userDisconnect: false, reconnectTries: 0, openIds: new Set(), wakeLock: null,
@@ -570,8 +572,8 @@ function checkBle() {
   $('#noBle').hidden = !!ble;
   return ble;
 }
-if (!checkBle()) setTimeout(() => { if (!checkBle()) log('No Bluetooth API (navigator.bluetooth / navigator.webble)', 'err'); else log('Bluetooth API appeared', 'ok'); }, 1500);
-else log('Bluetooth API: ' + (navigator.bluetooth ? 'navigator.bluetooth' : 'navigator.webble'));
+if (!checkBle()) setTimeout(() => { if (!checkBle()) log('No Bluetooth API (navigator.bluetooth / beacio / webble)', 'err'); else log('Bluetooth API appeared: ' + bleName(), 'ok'); }, 1500);
+else log('Bluetooth API: ' + bleName());
 loadSessions();
 state.current = state.sessions.find((s) => !s.endedAt && s.shots.length) || null;
 render();
