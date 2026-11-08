@@ -78,6 +78,22 @@
   <button id="btnConnect" class="primary">Connect</button>
 </header>
 
+<div id="jsErr" class="banner" style="background:#3a1414;border-color:#7a2a2a;color:#ffb3b3" hidden></div>
+<script>
+window.addEventListener('error', function (e) {
+  var el = document.getElementById('jsErr');
+  if (!el) return;
+  el.hidden = false;
+  el.textContent += 'JS error: ' + (e.message || e) + (e.lineno ? ' (line ' + e.lineno + ':' + e.colno + ')' : '') + '\n';
+  el.style.whiteSpace = 'pre-wrap';
+});
+window.addEventListener('unhandledrejection', function (e) {
+  var el = document.getElementById('jsErr');
+  if (!el) return;
+  el.hidden = false;
+  el.textContent += 'Promise error: ' + (e.reason && e.reason.message || e.reason) + '\n';
+});
+</script>
 <div id="noBle" class="banner" hidden>
   This browser has no Web Bluetooth. On iPhone: open this page in <b>Bluefy – Web BLE Browser</b>, or enable the <b>WebBLE</b> extension in Safari for this site.
 </div>
@@ -103,7 +119,7 @@
 <div id="history"></div>
 <textarea id="exportBox" hidden readonly></textarea>
 
-<details id="debug">
+<details id="debug" open>
   <summary>Debug</summary>
   <div class="row">
     <button class="small" id="btnConnectAll">Connect (show all devices)</button>
@@ -119,6 +135,7 @@
 </details>
 
 <script>
+(function () {
 'use strict';
 
 // Protocol per github.com/jkesseler/sg-timer-led-display docs/timer-protocols/special-pie-ble.md
@@ -199,7 +216,7 @@ function stats(s) {
 function newSession(timerId) {
   const s = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    timerId: timerId ?? null, startedAt: new Date().toISOString(), endedAt: null, shots: [], note: '',
+    timerId: timerId == null ? null : timerId, startedAt: new Date().toISOString(), endedAt: null, shots: [], note: '',
   };
   state.sessions.unshift(s);
   state.current = s;
@@ -306,7 +323,14 @@ async function connect(acceptAll) {
           filters: [{ services: [UUID.timerSvc] }, { namePrefix: 'SP' }, { namePrefix: 'M1A2' }, { namePrefix: 'Special' }],
           optionalServices: OPTIONAL_SERVICES,
         };
-    const dev = await ble.requestDevice(opts);
+    log('Requesting device (' + (acceptAll ? 'all devices' : 'filtered') + ')…');
+    setStatus('connecting', 'searching…');
+    const hint = setTimeout(() => {
+      log('No device picker after 15 s. Check: iOS Settings → Privacy & Security → Bluetooth → Bluefy is ON, Bluetooth is on, timer is on.', 'err');
+      setStatus('', 'no picker');
+    }, 15000);
+    let dev;
+    try { dev = await ble.requestDevice(opts); } finally { clearTimeout(hint); }
     state.device = dev;
     state.userDisconnect = false;
     dev.addEventListener('gattserverdisconnected', onDisconnected);
@@ -405,7 +429,7 @@ function renderLive(flash) {
     return;
   }
   const st = stats(s);
-  big.textContent = fmt(st.total ?? 0);
+  big.textContent = fmt(st.total == null ? 0 : st.total);
   $('#sShots').textContent = st.n;
   $('#sFirst').textContent = fmt(st.first);
   $('#sSplit').textContent = fmt(st.last);
@@ -487,7 +511,7 @@ function demo() {
 }
 
 // ---------- wiring ----------
-$('#btnConnect').onclick = () => connect(false);
+$('#btnConnect').onclick = () => { log('Connect tapped'); connect(false); };
 $('#btnConnectAll').onclick = () => connect(true);
 $('#btnDisconnect').onclick = disconnect;
 $('#btnDemo').onclick = demo;
@@ -510,7 +534,7 @@ $('#history').addEventListener('click', (e) => {
   const card = e.target.closest('[data-id]');
   if (!card) return;
   const id = card.dataset.id;
-  const act = e.target.closest('[data-act]')?.dataset.act;
+  const act = (e.target.closest('[data-act]') || { dataset: {} }).dataset.act;
   if (act === 'toggle') {
     state.openIds.has(id) ? state.openIds.delete(id) : state.openIds.add(id);
     card.classList.toggle('open');
@@ -547,6 +571,9 @@ loadSessions();
 state.current = state.sessions.find((s) => !s.endedAt && s.shots.length) || null;
 render();
 log('Ready');
+// Exposed for debugging only
+window.ShotTimer = { feed: feed, state: state };
+})();
 </script>
 </body>
 </html>
