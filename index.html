@@ -244,11 +244,14 @@ function onStart(timerId) {
   $('#bigLabel').textContent = 'string started';
 }
 
-function onShot(idx, ms) {
+function onShot(idx, ms, timerId) {
   let s = state.current;
   if (!s || s.endedAt) {
-    s = newSession(null);
+    s = newSession(timerId);
     log('Shot without START, opened a new string', 'warn');
+  } else if (s.timerId != null && timerId != null && s.timerId !== timerId && s.shots.length) {
+    closeCurrent(); s = newSession(timerId);
+    log('String id changed, opened a new string', 'warn');
   }
   const ex = s.shots.find((x) => x.i === idx);
   if (ex && ex.ms === ms) return;            // duplicate notification
@@ -298,9 +301,11 @@ function handleFrame(f) {
   const type = f[2];
   if (type === 0x34) onStart(f[3]);
   else if (type === 0x36 && f.length >= 10) {
+    // M1A2+ fw 1.2.0: [3]=? (0 so far) [4]=seconds [5]=centiseconds [6]=shot number (1-based) [7]=string id
     if (f[3] !== 0) log('Note: shot byte3 = 0x' + f[3].toString(16) + ' (unknown field)', 'warn');
-    onShot(f[6], f[4] * 1000 + f[5] * 10);
+    onShot(f[6] - 1, f[4] * 1000 + f[5] * 10, f[7]);
   } else if (type === 0x18) onStop(f[3]);
+  else if (type === 0x70 || type === 0x71) log('Info frame 0x' + type.toString(16) + ': "' + ascii(f.slice(4, -2)) + '"');
   else log('Unknown frame type 0x' + type.toString(16).toUpperCase() + ': ' + hex(f), 'warn');
 }
 
@@ -503,7 +508,7 @@ function demo() {
   frames.push([0xF8, 0xF9, 0x34, id, 0xF9, 0xF8]);
   let t = 1100 + Math.floor(Math.random() * 400);
   for (let i = 0; i < 6; i++) {
-    frames.push([0xF8, 0xF9, 0x36, 0x00, Math.floor(t / 1000), Math.floor((t % 1000) / 10), i, 0x00, 0xF9, 0xF8]);
+    frames.push([0xF8, 0xF9, 0x36, 0x00, Math.floor(t / 1000), Math.floor((t % 1000) / 10), i + 1, id, 0xF9, 0xF8]);
     t += 180 + Math.floor(Math.random() * 160);
   }
   frames.push([0xF8, 0xF9, 0x18, id, 0xF9, 0xF8]);
